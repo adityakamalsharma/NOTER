@@ -1,124 +1,171 @@
-# NOTER
+# OSCP Headless Note Taker (`note`)
 
-# Headless Note Taker (CLI-to-Obsidian)
+A robust, CLI-first Python utility designed for rapid, organized note-taking during penetration tests. It bridges the gap between terminal operations and Obsidian-ready Markdown notes, allowing you to log data, capture screenshots, and review progress without leaving the command line.
 
-A Python-based CLI automation tool designed for Penetration Testers. It allows you to log command output, screenshots, and notes directly from your Kali terminal into your Obsidian Vault (hosted on Windows/Host OS) without leaving the command line.
+## Features
 
-## 🚀 Features
+* **Context Aware:** "Switch" to a machine once; all subsequent commands log to that specific file.
+* **Obsidian Compatible:** Generates standard Markdown structure with dedicated attachment folders.
+* **Pipe Friendly:** Pipe tool output directly into your notes (`nmap ... | note log`).
+* **Interactive Logging:** Opens your preferred editor (`nano`/`vim`) for manual entry if no input is piped.
+* **Clipboard Screenshots:** Instantly saves clipboard images to the note's attachment folder using `xclip`.
+* **Glow Integration:** Renders your markdown notes beautifully in the terminal with pagination.
 
-* **Context Aware:** "Switch" modes to focus on specific machines (e.g., `note switch Sufferance`). The script remembers where to log data.
-* **Headless Logging:** Pipe tool output directly to notes (`nmap ... | note log`).
-* **Smart Parsing:** Automatically detects headers in your Markdown file and asks where to file the data (Enumeration, Exploitation, Loot, etc.).
-* **Clipboard Screenshots:** Instantly grabs images from your clipboard, saves them to the correct attachment folder, and embeds the link in your note.
-* **Auto-Templating:** Generates a clean directory structure and Markdown template for new machines.
+---
 
-## 🛠 Prerequisites
+## 🛠️ Installation & Prerequisites
 
-1.  **Environment:** Linux (Kali) VM with a Shared Folder connected to a Windows Host (where Obsidian lives).
-2.  **Dependencies:**
-    * Python 3
-    * `xclip` (for clipboard manipulation)
-    * `nano` (or your preferred terminal editor)
+### Dependencies
+
+This tool relies on system utilities for clipboard management and markdown rendering.
 
 ```bash
+# 1. Install xclip (for screenshots)
 sudo apt update && sudo apt install xclip
+
+# 2. Install Glow (for 'note show')
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+sudo apt update && sudo apt install glow
+
+```
+
+### Setup
+
+1. Download the script and save it as `note`.
+2. Make it executable and move it to your path:
+```bash
+chmod +x note
+sudo mv note /usr/local/bin/
+
 ```
 
 
-## ⚙️ Installation & Configuration
-
-1. **Download the Script:**
-Save the script as `note.py` in your home or scripts directory.
-2. **Configure Paths:**
-Open `note.py` and edit the `ROOT_PATH` variable to point to your Shared Folder mount point inside Kali.
+3. **Configuration:** Open the script and edit the `CONFIGURATION` block at the top:
 ```python
-# Inside note.py
-ROOT_PATH = "/mnt/hgfs/Vault/Machines"  # <--- CHANGE THIS
+ROOT_PATH = "/mnt/hgfs/shared/"  # Where your Obsidian vault lives
+DEFAULT_EDITOR = "nano"          # Your preferred text editor
 
 ```
 
 
-3. **Create Alias:**
-Add a helper function to your shell configuration (`~/.zshrc` or `~/.bashrc`) to run the script easily.
-```bash
-function note() {
-    python3 /path/to/your/note.py "$@"
-}
 
-```
+---
 
+## 📖 Usage Manual (Workflow)
 
-*Run `source ~/.zshrc` to apply.*
+The commands are designed to be used hierarchically during an engagement.
 
-## 📖 Usage
+### 1. Initialization (`switch`)
 
-### 1. Set the Context (Start a Box)
+**Always run this first.** This sets the active "context" for the tool. It creates the directory structure and a fresh Markdown file based on the built-in template if one doesn't exist.
 
-Before you start hacking, tell the script which machine you are working on. This creates the file structure if it doesn't exist.
+**Syntax:**
 
 ```bash
-note switch MachineName --ip 10.10.10.x --os linux
+note switch <MachineName> [--ip <IP>] [--os <linux/windows>]
 
 ```
 
-### 2. Log Tool Output (Piping)
-
-Don't copy-paste terminal output. Pipe it.
+**Example:**
 
 ```bash
-nmap -p- -sC -sV 10.10.10.x | note log
+note switch Flight --ip 10.10.11.187 --os windows
+# Output: [OK] Context set to: Flight
 
 ```
 
-* The script will ask you which **Header** (Enumeration, exploitation, etc.) to append the data to.
-* Large outputs are automatically wrapped in `<details>` tags to keep your notes clean.
+### 2. Viewing Context (`show`)
 
-### 3. Log Manual Notes (Interactive)
+Review your current progress without leaving the terminal. This launches `glow` in pager mode.
 
-Just want to write a quick thought?
+**Syntax:**
+
+```bash
+note show
+
+```
+
+* **Controls:** Use arrow keys to scroll, `q` to quit.
+
+### 3. Logging Data (`log`)
+
+There are two ways to log data: **Piped** (for automation) and **Interactive** (for manual notes).
+
+#### A. Piped Input (Automated)
+
+Great for dumping tool output directly into a specific section (e.g., "Enumeration").
+
+**Example:**
+
+```bash
+nmap -p- --min-rate 1000 10.10.11.187 | note log
+
+```
+
+* *Action:* The script detects the pipe, captures the output, and prompts you to select a section (Enumeration, Exploitation, etc.) to append it to. Long output is auto-collapsed in `<details>` tags.
+
+#### B. Interactive Input (Manual)
+
+Great for writing thoughts, checklists, or copy-pasting data manually.
+
+**Example:**
 
 ```bash
 note log
 
 ```
 
-* Opens `nano` (or your default editor).
-* Write your note, save, and exit.
-* Select the target header.
+* *Action:* Opens `nano` (or configured editor). Type your note, save, and exit. The script then asks which section to append the note to.
 
-### 4. Save Screenshots
+### 4. Evidence Gathering (`shot`)
 
-Take a screenshot using your preferred tool (Flameshot, Windows Snipping Tool, etc.) and copy it to the **Clipboard**. Then run:
+Takes an image currently stored in your clipboard, saves it to the `attachments/` folder, and appends a Markdown link to your note.
+
+**Syntax:**
 
 ```bash
-note shot -c "Login Page"
+note shot [-c "Caption text"]
 
 ```
 
-* Saves the image to `MachineName/attachments/`.
-* Appends `![[Image.png]]` to the note.
+**Workflow:**
 
-## 📂 Directory Structure Created
-
-The script organizes your vault automatically:
-
-```text
-/ROOT_PATH/
-├── MachineName/
-│   ├── MachineName.md      <-- The Note
-│   └── attachments/        <-- Screenshots
+1. Take a screenshot using your OS tool (e.g., `Shift+PrintScreen` or `Flameshot`) and **copy to clipboard**.
+2. Run:
+```bash
+note shot -c "Initial Foothold"
 
 ```
 
-## Troubleshooting
 
-* **"Note file not found":** Ensure you ran `note switch <name>` first.
-* **Permission Denied:** Ensure your VM has write access to the Shared Folder.
-* **Screenshot Fails:** Ensure `xclip` is installed and you actually have an image in your clipboard.
+3. **Result:** The image is saved as `MachineName_Timestamp.png` and linked in your note.
 
 ---
 
+## ⚠️ Edge Cases & Troubleshooting
 
-```
+| Issue | Cause | Solution |
+| --- | --- | --- |
+| `[!] No active context` | You tried to run `log`, `show`, or `shot` without running `switch` first. | Run `note switch <Name>` to initialize the session. |
+| `[!] Glow not installed` | You ran `note show` but the binary is missing. | Follow the installation instructions above. |
+| `[!] Failed to grab image` | The clipboard is empty or contains text, not an image. | Ensure you copied the screenshot to the clipboard, not just saved it to disk. |
+| **New Headers** | You want to log data to a section that doesn't exist in the template (e.g., "Tunneling"). | When `note log` asks for a section, choose `[Create New Section]` and type "Tunneling". The script will create the header automatically. |
+| **Empty Pipe** | You ran `cat file | note log` but the file was empty. |
+
+---
+
+## 📂 Directory Structure created
+
+If `ROOT_PATH` is set to `/mnt/hgfs/shared/`, running `note switch Flight` creates:
+
+```text
+/mnt/hgfs/shared/
+└── Flight/
+    ├── Flight.md          # Your main Obsidian Note
+    └── attachments/       # Folder for screenshots
+        ├── Flight_20231025_1030.png
+        └── ...
 
 ```
