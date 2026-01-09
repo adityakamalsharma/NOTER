@@ -15,7 +15,6 @@ STATE_FILE = os.path.expanduser("~/.oscp_note_state")
 DEFAULT_EDITOR = "nano"
 
 # Default Template for NEW files
-# You can customize these headers.
 DEFAULT_TEMPLATE = """# {name}
 
 ## Information
@@ -90,7 +89,6 @@ def insert_content(file_path, header_name, content):
             break
             
     # Insert before the next header (minus one line to keep spacing clean)
-    # We construct the payload
     payload = f"\n{content}\n"
     lines.insert(insert_index, payload)
 
@@ -100,8 +98,6 @@ def insert_content(file_path, header_name, content):
 def cmd_switch(args):
     """Switch context to a machine"""
     name = args.name
-    # Determine subfolder based on OS if provided, else root of Machines
-    # Simplified: We put everything in Machines/<Name>
     machine_dir = os.path.join(ROOT_PATH, name)
     note_path = os.path.join(machine_dir, f"{name}.md")
     
@@ -190,6 +186,28 @@ def cmd_log(args):
     insert_content(note_path, selected_header, formatted_block)
     print(f"[OK] Appended to '{selected_header}' in {state['name']}")
 
+def cmd_show(args):
+    """Open the current note in glow"""
+    state = load_state()
+    if not state:
+        print("[!] No active context. Run 'note switch <name>' first.")
+        sys.exit(1)
+
+    note_path = state['path']
+    if not os.path.exists(note_path):
+        print(f"[!] Note file not found at {note_path}")
+        sys.exit(1)
+
+    if shutil.which("glow") is None:
+        print("[!] Glow is not installed.")
+        sys.exit(1)
+
+    # Run glow in pager mode (-p)
+    try:
+        subprocess.call(["glow", "-p", note_path])
+    except Exception as e:
+        print(f"[!] Error running glow: {e}")
+
 def cmd_shot(args):
     state = load_state()
     if not state:
@@ -203,31 +221,21 @@ def cmd_shot(args):
     filename = f"{state['name']}_{timestamp}.png"
     dest_path = os.path.join(attach_dir, filename)
     
-    # Check if xclip is installed
     if shutil.which("xclip") is None:
         print("[!] xclip not installed. Run: sudo apt install xclip")
         sys.exit(1)
 
     print("[*] Grabbing clipboard...")
-    # Dump clipboard to file
     with open(dest_path, 'wb') as f:
-        # Run xclip to output png
         p = subprocess.run(['xclip', '-selection', 'clipboard', '-t', 'image/png', '-o'], stdout=f)
         
     if p.returncode != 0:
         print("[!] Failed to grab image. Is there an image in your clipboard?")
-        # Cleanup empty file
         if os.path.exists(dest_path) and os.path.getsize(dest_path) == 0:
             os.remove(dest_path)
         sys.exit(1)
 
-    # Append link to note
-    # We use relative path for Markdown: attachments/filename.png
     link = f"![[{filename}]]"
-    
-    # Insert at bottom of DUMP or specified section? 
-    # Usually screenshots are context-heavy, let's ask or default to Loot/Dump
-    # For speed, we default to DUMP.
     insert_content(state['path'], "DUMP", f"\n**Screenshot:** {args.caption}\n{link}\n")
     print(f"[OK] Screenshot saved: {filename}")
 
@@ -244,6 +252,9 @@ def main():
     # LOG
     lg = subparsers.add_parser("log", help="Log text/output to note")
 
+    # SHOW (New)
+    show = subparsers.add_parser("show", help="View current note in Glow")
+
     # SHOT
     sh = subparsers.add_parser("shot", help="Save clipboard image to note")
     sh.add_argument("-c", "--caption", help="Caption for image", default="")
@@ -254,6 +265,8 @@ def main():
         cmd_switch(args)
     elif args.command == "log":
         cmd_log(args)
+    elif args.command == "show":
+        cmd_show(args)
     elif args.command == "shot":
         cmd_shot(args)
     else:
